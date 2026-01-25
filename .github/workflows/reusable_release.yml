@@ -1,0 +1,126 @@
+name: Reusable Plugin Release
+
+on:
+  workflow_call:
+    inputs:
+      plugin_name:
+        required: true
+        type: string
+        description: "Name of the plugin directory"
+      title:
+        required: true
+        type: string
+        description: "Title of the plugin"
+      description:
+        required: true
+        type: string
+        description: "Description of the plugin"
+      tag_prefix:
+        required: false
+        type: string
+        default: "v"
+        description: "Prefix of the tag to strip (e.g., 'v' for v1.0.0)"
+      changelog_filter_path:
+        required: false
+        type: string
+        default: "."
+        description: "Path to filter git log for changelog (default: root)"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout plugin code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: plugin-repo
+
+      - name: Checkout build tools
+        uses: actions/checkout@v4
+        with:
+          repository: haxe18/checkmk-plugin-mpk-action
+          path: build-tools
+
+      - name: Define plugin variables
+        run: |
+          echo "PLUGIN_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          # Extract version based on prefix
+          PREFIX="${{ inputs.tag_prefix }}"
+          VERSION=${GITHUB_REF_NAME#$PREFIX}
+          echo "PLUGIN_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "PLUGIN_GIT_URL=${GITHUB_SERVER_URL}/${{ github.repository }}" >> $GITHUB_ENV
+
+      - name: Build MKP package
+        run: |
+          # Go to plugin repo root so the script runs in the correct context
+          cd plugin-repo
+
+          ../build-tools/scripts/build_plugin.sh \
+            --plugin-name "${{ inputs.plugin_name }}" \
+            --title "${{ inputs.title }}" \
+            --description "${{ inputs.description }}" \
+            --version "${{ env.PLUGIN_VERSION }}" \
+            --author "${{ github.actor }}" \
+            --git-url "${{ env.PLUGIN_GIT_URL }}" \
+            --ci
+
+          # Find the generated MKP file
+          MKP_FILE=$(ls *.mkp | head -n 1)
+          echo "MKP_FILENAME=$MKP_FILE" >> $GITHUB_ENV
+
+          # Move MKP file to root workspace for upload
+          mv "$MKP_FILE" ../"$MKP_FILE"
+
+      - name: Get previous tag for changelog
+        id: get_previous_tag
+        working-directory: plugin-repo
+        run: |
+          PREFIX="${{ inputs.tag_prefix }}"
+          # Find previous tag matching the pattern
+          PREVIOUS_TAG=$(git tag --list "${PREFIX}*" --sort=-version:refname | grep -v "${{ env.PLUGIN_TAG }}" | head -n1 || echo "")
+          echo "PREVIOUS_TAG=$PREVIOUS_TAG" >> $GITHUB_ENV
+
+      - name: Generate Changelog
+        id: generate_changelog
+        working-directory: plugin-repo
+        run: |
+          CURRENT_TAG="${{ env.PLUGIN_TAG }}"
+          PREVIOUS_TAG="${{ env.PREVIOUS_TAG }}"
+          FILTER_PATH="${{ inputs.changelog_filter_path }}"
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found. Generating changelog from all commits."
+            CHANGELOG=$(git log --pretty=format:"- %s%w(0,4,4)%+b" --reverse -- "$FILTER_PATH")
+          else
+            echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG."
+            CHANGELOG=$(git log --pretty=format:"- %s%w(0,4,4)%+b" "$PREVIOUS_TAG".."$CURRENT_TAG" --reverse -- "$FILTER_PATH")
+          fi
+
+          # Handle multiline output for GITHUB_OUTPUT
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.PLUGIN_TAG }}
+          name: ${{ inputs.title }} ${{ env.PLUGIN_VERSION }}
+          body: |
+            ## ${{ inputs.title }} ${{ env.PLUGIN_VERSION }}
+
+            ### Changes
+            ${{ steps.generate_changelog.outputs.CHANGELOG }}
+
+            ### Installation
+            ```bash
+            mkp install ${{ env.MKP_FILENAME }}
+            ```
+          files: |
+            ${{ env.MKP_FILENAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
