@@ -1,6 +1,7 @@
 # Checkmk Plugin Release Action
 
-A reusable GitHub Workflow for building and releasing Checkmk plugins (MKP packages).
+A GitHub Action for building and releasing Checkmk plugins (MKP packages).
+It builds the MKP, writes a changelog from the git log and creates a GitHub release.
 
 ## Usage
 
@@ -14,6 +15,34 @@ on:
     tags:
       - 'v*'
 
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # all tags and commits, needed for the changelog
+
+      - uses: haxe18/Check_MK-plugin_mpk_action@v1
+        with:
+          plugin_name: "my_plugin"
+          title: "My Plugin Title"
+          description: "Description of my plugin"
+          tag_prefix: "v"
+```
+
+Pin a version tag (`@v1`, `@v1.2.0`) so a change on `main` does not affect your releases.
+The build script always comes from the same version as the action.
+
+### Old setup: reusable workflow
+
+`.github/workflows/reusable_release.yml` still works for existing plugin repos and takes
+the same inputs. It always runs the action from `main`, so version pinning does not
+apply there:
+
+```yaml
 permissions:
   contents: write
 
@@ -24,7 +53,6 @@ jobs:
       plugin_name: "my_plugin"
       title: "My Plugin Title"
       description: "Description of my plugin"
-      tag_prefix: "v"
     secrets: inherit
 ```
 
@@ -54,3 +82,10 @@ Notes:
 | `description` | Description of the plugin | Yes | |
 | `tag_prefix` | Tag prefix to strip (e.g., 'v') | No | "v" |
 | `changelog_filter_path` | Path to filter git log | No | "." |
+| `github_token` | Token used to create the release (action only) | No | `github.token` |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `mkp_file` | File name of the built MKP package (action only) |

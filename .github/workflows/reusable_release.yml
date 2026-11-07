@@ -1,3 +1,5 @@
+# Kept for plugin repos that still call this workflow. New setups use the
+# action directly, see README.md.
 name: Reusable Plugin Release
 
 on:
@@ -37,95 +39,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          path: plugin-repo
 
-      - name: Checkout build tools
-        uses: actions/checkout@v4
+      - name: Build and release
+        uses: haxe18/Check_MK-plugin_mpk_action@main
         with:
-          repository: haxe18/checkmk-plugin-mpk-action
-          path: build-tools
-
-      - name: Define plugin variables
-        run: |
-          echo "PLUGIN_TAG=${GITHUB_REF_NAME}" >> $GITHUB_ENV
-          # Extract version based on prefix
-          PREFIX="${{ inputs.tag_prefix }}"
-          VERSION=${GITHUB_REF_NAME#$PREFIX}
-          echo "PLUGIN_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "PLUGIN_GIT_URL=${GITHUB_SERVER_URL}/${{ github.repository }}" >> $GITHUB_ENV
-
-      - name: Build MKP package
-        # Inputs go through env, so quotes in them cannot break the shell line
-        env:
-          INPUT_PLUGIN_NAME: ${{ inputs.plugin_name }}
-          INPUT_TITLE: ${{ inputs.title }}
-          INPUT_DESCRIPTION: ${{ inputs.description }}
-        run: |
-          # Go to plugin repo root so the script runs in the correct context
-          cd plugin-repo
-
-          ../build-tools/scripts/build_plugin.sh \
-            --plugin-name "$INPUT_PLUGIN_NAME" \
-            --title "$INPUT_TITLE" \
-            --description "$INPUT_DESCRIPTION" \
-            --version "${{ env.PLUGIN_VERSION }}" \
-            --author "${{ github.actor }}" \
-            --git-url "${{ env.PLUGIN_GIT_URL }}" \
-            --ci
-
-          # Find the generated MKP file
-          MKP_FILE=$(ls *.mkp | head -n 1)
-          echo "MKP_FILENAME=$MKP_FILE" >> $GITHUB_ENV
-
-          # Move MKP file to root workspace for upload
-          mv "$MKP_FILE" ../"$MKP_FILE"
-
-      - name: Get previous tag for changelog
-        id: get_previous_tag
-        working-directory: plugin-repo
-        run: |
-          PREFIX="${{ inputs.tag_prefix }}"
-          # Find previous tag matching the pattern
-          PREVIOUS_TAG=$(git tag --list "${PREFIX}*" --sort=-version:refname | grep -v "${{ env.PLUGIN_TAG }}" | head -n1 || echo "")
-          echo "PREVIOUS_TAG=$PREVIOUS_TAG" >> $GITHUB_ENV
-
-      - name: Generate Changelog
-        id: generate_changelog
-        working-directory: plugin-repo
-        run: |
-          CURRENT_TAG="${{ env.PLUGIN_TAG }}"
-          PREVIOUS_TAG="${{ env.PREVIOUS_TAG }}"
-          FILTER_PATH="${{ inputs.changelog_filter_path }}"
-
-          if [ -z "$PREVIOUS_TAG" ]; then
-            echo "No previous tag found. Generating changelog from all commits."
-            CHANGELOG=$(git log --pretty=format:"- %s%w(0,4,4)%+b" --reverse -- "$FILTER_PATH")
-          else
-            echo "Generating changelog from $PREVIOUS_TAG to $CURRENT_TAG."
-            CHANGELOG=$(git log --pretty=format:"- %s%w(0,4,4)%+b" "$PREVIOUS_TAG".."$CURRENT_TAG" --reverse -- "$FILTER_PATH")
-          fi
-
-          # Handle multiline output for GITHUB_OUTPUT
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.PLUGIN_TAG }}
-          name: ${{ inputs.title }} ${{ env.PLUGIN_VERSION }}
-          body: |
-            ## ${{ inputs.title }} ${{ env.PLUGIN_VERSION }}
-
-            ### Changes
-            ${{ steps.generate_changelog.outputs.CHANGELOG }}
-
-            ### Installation
-            ```bash
-            mkp install ${{ env.MKP_FILENAME }}
-            ```
-          files: |
-            ${{ env.MKP_FILENAME }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          plugin_name: ${{ inputs.plugin_name }}
+          title: ${{ inputs.title }}
+          description: ${{ inputs.description }}
+          tag_prefix: ${{ inputs.tag_prefix }}
+          changelog_filter_path: ${{ inputs.changelog_filter_path }}
