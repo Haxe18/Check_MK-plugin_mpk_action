@@ -116,6 +116,7 @@ mkdir -p mkp_build/plugin_content
 # Copy plugin files
 echo -e "${GREEN}[2/7]${NC} Copying plugin files..."
 cp -R "${PLUGIN_DIR}" mkp_build/plugin_content/
+find mkp_build/plugin_content -type d -name __pycache__ -prune -exec rm -rf {} +
 
 # Strip comments (optional)
 if [ "$STRIP_COMMENTS" = true ]; then
