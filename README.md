@@ -28,6 +28,23 @@ jobs:
     secrets: inherit
 ```
 
+## Plugin directory layout
+
+`build_plugin.sh` packs `<plugin_name>/` into the MKP part `cmk_addons_plugins`
+(`~/local/lib/python3/cmk_addons/plugins/`). Two subdirectories get their own part,
+because Checkmk 2.4 does not load them from `cmk_addons`:
+
+| Directory | MKP part | Installed to |
+|-----------|----------|--------------|
+| `<plugin_name>/bakery/` | `lib` | `~/local/lib/python3/cmk/base/cee/plugins/bakery/` |
+| `<plugin_name>/agents/` | `agents` | `~/local/share/check_mk/agents/` (e.g. `agents/plugins/x` -> `plugins/x`) |
+
+Notes:
+- `--strip-comments` (and `--ci`) strips whole-line comments from `*.py` files in
+  `cmk_addons_plugins` and `bakery/`, but not from files in `agents/`: agent plugins
+  are shipped unchanged.
+- `__pycache__` directories are never packed.
+
 ## Inputs
 
 | Input | Description | Required | Default |

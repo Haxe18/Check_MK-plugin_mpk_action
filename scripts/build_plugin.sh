@@ -118,10 +118,28 @@ echo -e "${GREEN}[2/7]${NC} Copying plugin files..."
 cp -R "${PLUGIN_DIR}" mkp_build/plugin_content/
 find mkp_build/plugin_content -type d -name __pycache__ -prune -exec rm -rf {} +
 
+# Checkmk 2.4 does not load these from cmk_addons/plugins/<family>/, so they get
+# their own MKP parts:
+#   <plugin>/bakery/*  -> part "lib"    (~/local/lib/python3/cmk/base/cee/plugins/bakery/)
+#   <plugin>/agents/*  -> part "agents" (~/local/share/check_mk/agents/)
+CONTENT_DIR="mkp_build/plugin_content/${PLUGIN_DIR}"
+if [ -d "${CONTENT_DIR}/bakery" ]; then
+    mkdir -p mkp_build/lib_content/python3/cmk/base/cee/plugins/bakery
+    mv "${CONTENT_DIR}/bakery/"* mkp_build/lib_content/python3/cmk/base/cee/plugins/bakery/
+    rm -rf "${CONTENT_DIR}/bakery"
+    echo "      bakery/ -> MKP part 'lib'"
+fi
+if [ -d "${CONTENT_DIR}/agents" ]; then
+    mkdir -p mkp_build/agents_content
+    mv "${CONTENT_DIR}/agents/"* mkp_build/agents_content/
+    rm -rf "${CONTENT_DIR}/agents"
+    echo "      agents/ -> MKP part 'agents'"
+fi
+
 # Strip comments (optional)
 if [ "$STRIP_COMMENTS" = true ]; then
     echo -e "${GREEN}[3/7]${NC} Stripping comments from Python files..."
-    find mkp_build/plugin_content/ -type f -name "*.py" -print0 | while IFS= read -r -d $'\0' file; do
+    find mkp_build/plugin_content/ mkp_build/lib_content/ -type f -name "*.py" -print0 2>/dev/null | while IFS= read -r -d $'\0' file; do
         # Preserve shebang, remove other comments
         sed -i '/^#!.*$/!{ /^\s*#/d }' "$file"
     done
@@ -132,7 +150,21 @@ fi
 
 # Generate file list
 echo -e "${GREEN}[4/7]${NC} Generating file list..."
-PLUGIN_FILES=$(find "${PLUGIN_DIR}/" -type f | sed 's/^/"/;s/$/"/' | paste -sd,)
+# file_list <dir> <path>: quoted, comma separated file paths relative to <dir>
+file_list() {
+    (cd "$1" && find "$2" -type f | sed 's|^\./||;s/^/"/;s/$/"/' | paste -sd,)
+}
+PLUGIN_FILES=$(file_list mkp_build/plugin_content "${PLUGIN_DIR}/")
+FILES_DICT="\"cmk_addons_plugins\": [ ${PLUGIN_FILES} ]"
+PART_TARS="cmk_addons_plugins.tar"
+if [ -d mkp_build/lib_content ]; then
+    FILES_DICT="${FILES_DICT}, \"lib\": [ $(file_list mkp_build/lib_content .) ]"
+    PART_TARS="${PART_TARS} lib.tar"
+fi
+if [ -d mkp_build/agents_content ]; then
+    FILES_DICT="${FILES_DICT}, \"agents\": [ $(file_list mkp_build/agents_content .) ]"
+    PART_TARS="${PART_TARS} agents.tar"
+fi
 
 # Get git commit hash (if available)
 if git rev-parse --git-dir > /dev/null 2>&1; then
@@ -162,7 +194,7 @@ cat <<EOF > mkp_build/info
   'author': '${AUTHOR}',
   'description': '${PLUGIN_DESCRIPTION}',
   'download_url': '${GIT_URL}',
-  'files': {'cmk_addons_plugins': [ ${PLUGIN_FILES} ] },
+  'files': { ${FILES_DICT} },
   'name': '${PLUGIN_NAME}',
   'title': '${PLUGIN_TITLE}',
   'version': '${PLUGIN_VERSION}',
@@ -178,7 +210,7 @@ cat <<EOF > mkp_build/info.json
   "author": "${AUTHOR}",
   "description": "${PLUGIN_DESCRIPTION}",
   "download_url": "${GIT_URL}",
-  "files": {"cmk_addons_plugins": [ ${PLUGIN_FILES} ] },
+  "files": { ${FILES_DICT} },
   "name": "${PLUGIN_NAME}",
   "title": "${PLUGIN_TITLE}",
   "version": "${PLUGIN_VERSION}",
@@ -191,11 +223,18 @@ EOF
 # Create internal tar
 echo -e "${GREEN}[6/7]${NC} Creating internal tar archive..."
 tar -cf mkp_build/cmk_addons_plugins.tar -C mkp_build/plugin_content "${PLUGIN_DIR}"
+if [ -d mkp_build/lib_content ]; then
+    (cd mkp_build/lib_content && tar -cf ../lib.tar -- *)
+fi
+if [ -d mkp_build/agents_content ]; then
+    (cd mkp_build/agents_content && tar -cf ../agents.tar -- *)
+fi
 
 # Create final MKP package
 MKP_FILENAME="${PLUGIN_NAME}-${PLUGIN_VERSION}.mkp"
 echo -e "${GREEN}[7/7]${NC} Creating final MKP package..."
-tar -czf "$MKP_FILENAME" -C mkp_build/ info info.json cmk_addons_plugins.tar
+# shellcheck disable=SC2086 # PART_TARS is a space separated list of fixed names
+tar -czf "$MKP_FILENAME" -C mkp_build/ info info.json ${PART_TARS}
 
 # Get file size
 FILE_SIZE=$(du -h "$MKP_FILENAME" | cut -f1)
