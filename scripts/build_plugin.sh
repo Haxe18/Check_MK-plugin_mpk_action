@@ -139,10 +139,12 @@ fi
 # Strip comments (optional)
 if [ "$STRIP_COMMENTS" = true ]; then
     echo -e "${GREEN}[3/7]${NC} Stripping comments from Python files..."
-    find mkp_build/plugin_content/ mkp_build/lib_content/ -type f -name "*.py" -print0 2>/dev/null | while IFS= read -r -d $'\0' file; do
-        # Preserve shebang, remove other comments
-        sed -i '/^#!.*$/!{ /^\s*#/d }' "$file"
-    done
+    STRIP_DIRS=(mkp_build/plugin_content)
+    if [ -d mkp_build/lib_content ]; then
+        STRIP_DIRS+=(mkp_build/lib_content)
+    fi
+    # Tokenizer based, so '#' lines inside strings are kept
+    find "${STRIP_DIRS[@]}" -type f -name "*.py" -exec python3 "$(dirname "$0")/strip_comments.py" {} +
     echo "      Comments removed."
 else
     echo -e "${GREEN}[3/7]${NC} Skipping comment removal (use --strip-comments to enable)."
@@ -187,19 +189,28 @@ else
     VERSION_PACKAGED="Built locally at ref ${COMMIT_SHORT_SHA}"
 fi
 
+# py_str <text>: <text> as a Python string literal (quotes, newlines etc. escaped)
+py_str() {
+    python3 -I -c 'import sys; print(repr(sys.argv[1]), end="")' "$1"
+}
+# json_str <text>: <text> as a JSON string (quotes, newlines etc. escaped)
+json_str() {
+    python3 -I -c 'import json, sys; print(json.dumps(sys.argv[1]), end="")' "$1"
+}
+
 # Create info file (Python-style)
 echo -e "${GREEN}[5/7]${NC} Creating info and info.json files..."
 cat <<EOF > mkp_build/info
 {
-  'author': '${AUTHOR}',
-  'description': '${PLUGIN_DESCRIPTION}',
-  'download_url': '${GIT_URL}',
+  'author': $(py_str "${AUTHOR}"),
+  'description': $(py_str "${PLUGIN_DESCRIPTION}"),
+  'download_url': $(py_str "${GIT_URL}"),
   'files': { ${FILES_DICT} },
-  'name': '${PLUGIN_NAME}',
-  'title': '${PLUGIN_TITLE}',
-  'version': '${PLUGIN_VERSION}',
+  'name': $(py_str "${PLUGIN_NAME}"),
+  'title': $(py_str "${PLUGIN_TITLE}"),
+  'version': $(py_str "${PLUGIN_VERSION}"),
   'version.min_required': '2.4.0',
-  'version.packaged': '${VERSION_PACKAGED}',
+  'version.packaged': $(py_str "${VERSION_PACKAGED}"),
   'version.usable_until': None
 }
 EOF
@@ -207,15 +218,15 @@ EOF
 # Create info.json file (JSON-style)
 cat <<EOF > mkp_build/info.json
 {
-  "author": "${AUTHOR}",
-  "description": "${PLUGIN_DESCRIPTION}",
-  "download_url": "${GIT_URL}",
+  "author": $(json_str "${AUTHOR}"),
+  "description": $(json_str "${PLUGIN_DESCRIPTION}"),
+  "download_url": $(json_str "${GIT_URL}"),
   "files": { ${FILES_DICT} },
-  "name": "${PLUGIN_NAME}",
-  "title": "${PLUGIN_TITLE}",
-  "version": "${PLUGIN_VERSION}",
+  "name": $(json_str "${PLUGIN_NAME}"),
+  "title": $(json_str "${PLUGIN_TITLE}"),
+  "version": $(json_str "${PLUGIN_VERSION}"),
   "version.min_required": "2.4.0",
-  "version.packaged": "${VERSION_PACKAGED}",
+  "version.packaged": $(json_str "${VERSION_PACKAGED}"),
   "version.usable_until": null
 }
 EOF

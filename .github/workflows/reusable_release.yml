@@ -55,14 +55,19 @@ jobs:
           echo "PLUGIN_GIT_URL=${GITHUB_SERVER_URL}/${{ github.repository }}" >> $GITHUB_ENV
 
       - name: Build MKP package
+        # Inputs go through env, so quotes in them cannot break the shell line
+        env:
+          INPUT_PLUGIN_NAME: ${{ inputs.plugin_name }}
+          INPUT_TITLE: ${{ inputs.title }}
+          INPUT_DESCRIPTION: ${{ inputs.description }}
         run: |
           # Go to plugin repo root so the script runs in the correct context
           cd plugin-repo
 
           ../build-tools/scripts/build_plugin.sh \
-            --plugin-name "${{ inputs.plugin_name }}" \
-            --title "${{ inputs.title }}" \
-            --description "${{ inputs.description }}" \
+            --plugin-name "$INPUT_PLUGIN_NAME" \
+            --title "$INPUT_TITLE" \
+            --description "$INPUT_DESCRIPTION" \
             --version "${{ env.PLUGIN_VERSION }}" \
             --author "${{ github.actor }}" \
             --git-url "${{ env.PLUGIN_GIT_URL }}" \
