@@ -104,7 +104,8 @@ runs:
 
           ### Installation
           ```bash
-          mkp install ${{ steps.build.outputs.mkp_file }}
+          mkp add ${{ steps.build.outputs.mkp_file }}
+          mkp enable ${{ inputs.plugin_name }} ${{ steps.vars.outputs.version }}
           ```
         files: |
           ${{ steps.build.outputs.mkp_file }}
