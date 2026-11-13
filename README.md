@@ -82,6 +82,7 @@ Notes:
 | `description` | Description of the plugin | Yes | |
 | `tag_prefix` | Tag prefix to strip (e.g., 'v') | No | "v" |
 | `changelog_filter_path` | Path to filter git log | No | "." |
+| `usable_until` | Checkmk version from which the package is disabled (e.g. "3.0.0"). Checkmk disables the package on upgrade to that version | No | "" (no limit) |
 | `github_token` | Token used to create the release (action only) | No | `github.token` |
 
 ## Outputs

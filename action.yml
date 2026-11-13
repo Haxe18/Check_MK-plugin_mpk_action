@@ -22,6 +22,10 @@ inputs:
     description: "Path to filter git log for changelog (default: root)"
     required: false
     default: "."
+  usable_until:
+    description: "Checkmk version from which the package is disabled, e.g. '3.0.0' (default: no limit)"
+    required: false
+    default: ""
   github_token:
     description: "Token used to create the release"
     required: false
@@ -53,6 +57,7 @@ runs:
         INPUT_TITLE: ${{ inputs.title }}
         INPUT_DESCRIPTION: ${{ inputs.description }}
         PLUGIN_VERSION: ${{ steps.vars.outputs.version }}
+        INPUT_USABLE_UNTIL: ${{ inputs.usable_until }}
       run: |
         "${GITHUB_ACTION_PATH}/scripts/build_plugin.sh" \
           --plugin-name "$INPUT_PLUGIN_NAME" \
@@ -61,6 +66,7 @@ runs:
           --version "$PLUGIN_VERSION" \
           --author "$GITHUB_ACTOR" \
           --git-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+          --usable-until "$INPUT_USABLE_UNTIL" \
           --ci
         echo "mkp_file=${INPUT_PLUGIN_NAME}-${PLUGIN_VERSION}.mkp" >> "$GITHUB_OUTPUT"
 

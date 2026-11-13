@@ -9,6 +9,7 @@
 #   --version VERSION   Version of the plugin (required)
 #   --author NAME       Set author name (default: $USER)
 #   --git-url URL       Set download URL (default: auto-detect from git)
+#   --usable-until VER  Checkmk version from which the package is disabled (default: no limit)
 #   --strip-comments    Remove comments from Python files
 #   --ci                CI mode: enables --strip-comments, disables colors
 
@@ -21,6 +22,7 @@ PLUGIN_DESCRIPTION=""
 PLUGIN_VERSION=""
 AUTHOR="${USER}"
 GIT_URL=""
+USABLE_UNTIL=""
 STRIP_COMMENTS=false
 CI_MODE=false
 
@@ -49,6 +51,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --git-url)
             GIT_URL="$2"
+            shift 2
+            ;;
+        --usable-until)
+            USABLE_UNTIL="$2"
             shift 2
             ;;
         --strip-comments)
@@ -198,6 +204,15 @@ json_str() {
     python3 -I -c 'import json, sys; print(json.dumps(sys.argv[1]), end="")' "$1"
 }
 
+# Empty --usable-until means no upper limit
+if [ -n "$USABLE_UNTIL" ]; then
+    USABLE_UNTIL_PY=$(py_str "$USABLE_UNTIL")
+    USABLE_UNTIL_JSON=$(json_str "$USABLE_UNTIL")
+else
+    USABLE_UNTIL_PY="None"
+    USABLE_UNTIL_JSON="null"
+fi
+
 # Create info file (Python-style)
 echo -e "${GREEN}[5/7]${NC} Creating info and info.json files..."
 cat <<EOF > mkp_build/info
@@ -211,7 +226,7 @@ cat <<EOF > mkp_build/info
   'version': $(py_str "${PLUGIN_VERSION}"),
   'version.min_required': '2.4.0',
   'version.packaged': $(py_str "${VERSION_PACKAGED}"),
-  'version.usable_until': None
+  'version.usable_until': ${USABLE_UNTIL_PY}
 }
 EOF
 
@@ -227,7 +242,7 @@ cat <<EOF > mkp_build/info.json
   "version": $(json_str "${PLUGIN_VERSION}"),
   "version.min_required": "2.4.0",
   "version.packaged": $(json_str "${VERSION_PACKAGED}"),
-  "version.usable_until": null
+  "version.usable_until": ${USABLE_UNTIL_JSON}
 }
 EOF
 

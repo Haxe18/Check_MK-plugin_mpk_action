@@ -27,6 +27,11 @@ on:
         type: string
         default: "."
         description: "Path to filter git log for changelog (default: root)"
+      usable_until:
+        required: false
+        type: string
+        default: ""
+        description: "Checkmk version from which the package is disabled, e.g. '3.0.0' (default: no limit)"
 
 jobs:
   build-and-release:
@@ -48,3 +53,4 @@ jobs:
           description: ${{ inputs.description }}
           tag_prefix: ${{ inputs.tag_prefix }}
           changelog_filter_path: ${{ inputs.changelog_filter_path }}
+          usable_until: ${{ inputs.usable_until }}
